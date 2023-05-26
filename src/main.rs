@@ -51,7 +51,6 @@ enum Token {
 
 const LINE_END: [char; 1] = ['\n'];
 
-
 impl<I: Iterator<Item = char>> Parser<I> {
     fn unnext_char(&mut self, c: Option<char>) {
         assert_eq!(self.next_char, None);
@@ -115,10 +114,9 @@ impl<I: Iterator<Item = char>> Parser<I> {
                     "service" => self.parse_service(),
                     "message" => self.parse_message(),
                     _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
-
                 },
                 _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
-            }
+            };
         }
         None
     }
@@ -157,7 +155,8 @@ impl<I: Iterator<Item = char>> Parser<I> {
                 s.push(c);
                 if let Some(c) = self.next_char() {
                     s.push(c);
-                    if c == '/' {  // Singline comment
+                    if c == '/' {
+                        // Singline comment
                         // Till newline
                         while let Some(c) = self.next_char() {
                             if LINE_END.contains(&c) {
@@ -166,8 +165,8 @@ impl<I: Iterator<Item = char>> Parser<I> {
                             s.push(c);
                         }
                         return Some(Token::Comment(s));
-                    } 
-                    else if c == '*' {  // Multiline comment
+                    } else if c == '*' {
+                        // Multiline comment
                         while let Some(c) = self.next_char() {
                             s.push(c);
                             if c == '*' && self.peek_char() == Some('/') {
@@ -217,7 +216,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
         None
     }
 
-    fn parse_syntax<>(&mut self) -> Option<TopLevelParse> {
+    fn parse_syntax(&mut self) -> Option<TopLevelParse> {
         if self.next_non_ws_token() != Some(Token::Equals) {
             todo!() // Error
         }
@@ -236,7 +235,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
         return Some(TopLevelParse::SyntaxStatement);
     }
 
-    fn parse_service<>(&mut self) -> Option<TopLevelParse> {
+    fn parse_service(&mut self) -> Option<TopLevelParse> {
         match self.next_non_ws_token() {
             Some(Token::Ident(ident)) => todo!(),
             _ => todo!(), // Error
@@ -253,7 +252,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
         Some(TopLevelParse::Service(service))
     }
 
-    fn parse_message<>(&mut self) -> Option<TopLevelParse> {
+    fn parse_message(&mut self) -> Option<TopLevelParse> {
         match self.next_non_ws_token() {
             Some(Token::Ident(ident)) => todo!(),
             _ => todo!(), // Error
@@ -353,7 +352,10 @@ service hi {
     assert_eq!(Some(Token::Quote), p.next_token());
     assert_eq!(Some(Token::Semicolon), p.next_token());
     assert_eq!(Some(Token::Whitespace), p.next_token());
-    assert_eq!(Some(Token::Comment(String::from("// Some comment"))), p.next_token());
+    assert_eq!(
+        Some(Token::Comment(String::from("// Some comment"))),
+        p.next_token()
+    );
     assert_eq!(Some(Token::Ident(String::from("service"))), p.next_token());
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(Some(Token::Ident(String::from("hi"))), p.next_token());
@@ -364,7 +366,10 @@ service hi {
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(Some(Token::Ident(String::from("do"))), p.next_token());
     assert_eq!(Some(Token::ParensOpen), p.next_token());
-    assert_eq!(Some(Token::Ident(String::from("something"))), p.next_token());
+    assert_eq!(
+        Some(Token::Ident(String::from("something"))),
+        p.next_token()
+    );
     assert_eq!(Some(Token::ParensClose), p.next_token());
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(Some(Token::Ident(String::from("returns"))), p.next_token());
@@ -376,10 +381,6 @@ service hi {
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(Some(Token::BraceClose), p.next_token());
     assert_eq!(None, p.next_token());
-
-
-
-
 }
 
 fn main() {
