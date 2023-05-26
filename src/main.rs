@@ -1,20 +1,33 @@
 use std::str::FromStr;
 
+#[derive(Debug, PartialEq, Default)]
 struct Package {}
+#[derive(Debug, PartialEq, Default)]
 struct Message {}
+#[derive(Debug, PartialEq, Default)]
 struct Field {}
-struct Service {}
+#[derive(Debug, PartialEq, Default)]
+struct Service {
+    rpcs: Vec<Rpc>,
+}
+#[derive(Debug, PartialEq, Default)]
 struct Rpc {}
 
-enum ParseItem {}
+#[derive(Debug, PartialEq)]
+enum TopLevelParse {
+    SyntaxStatement, // Ignore for now...
+    Package(Package),
+    Service(Service),
+    Message(Message),
+}
 
 struct Parser<I: Iterator<Item = char>> {
     message_nest: i32,
     quote_nest: i32,
     parens_nest: i32,
-    comment_nest: i32,
     linenum: u32,
     colnum: u32,
+    // TODO Context?
     iterator: I,
     next_char: Option<char>,
 }
@@ -37,6 +50,7 @@ enum Token {
 }
 
 const LINE_END: [char; 1] = ['\n'];
+
 
 impl<I: Iterator<Item = char>> Parser<I> {
     fn unnext_char(&mut self, c: Option<char>) {
@@ -79,12 +93,12 @@ impl<I: Iterator<Item = char>> Parser<I> {
         }
         false
     }
-    pub fn parse(i: I) -> Self {
+
+    pub fn new(i: I) -> Self {
         Self {
             message_nest: 0,
             quote_nest: 0,
             parens_nest: 0,
-            comment_nest: 0,
             linenum: 0,
             colnum: 0,
             iterator: i,
@@ -92,6 +106,32 @@ impl<I: Iterator<Item = char>> Parser<I> {
         }
     }
 
+    // TODO: Parser will need to do multiple passes:
+    pub fn next_parse(&mut self) -> Option<TopLevelParse> {
+        while let Some(tok) = self.next_non_ws_token() {
+            return match tok {
+                Token::Ident(ident) => match ident.as_str() {
+                    "syntax" => self.parse_syntax(),
+                    "service" => self.parse_service(),
+                    "message" => self.parse_message(),
+                    _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
+
+                },
+                _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
+            }
+        }
+        None
+    }
+
+    pub fn next_non_ws_token(&mut self) -> Option<Token> {
+        loop {
+            match self.next_token() {
+                Some(Token::Whitespace) => continue,
+                Some(Token::Comment(_)) => continue,
+                other => return other,
+            }
+        }
+    }
 
     pub fn next_token(&mut self) -> Option<Token> {
         while let Some(c) = self.next_char() {
@@ -176,19 +216,82 @@ impl<I: Iterator<Item = char>> Parser<I> {
         }
         None
     }
+
+    fn parse_syntax<>(&mut self) -> Option<TopLevelParse> {
+        if self.next_non_ws_token() != Some(Token::Equals) {
+            todo!() // Error
+        }
+        if self.next_non_ws_token() != Some(Token::Quote) {
+            todo!() // Error
+        }
+        if self.next_token() != Some(Token::Ident(String::from("proto3"))) {
+            todo!() // Error
+        }
+        if self.next_non_ws_token() != Some(Token::Quote) {
+            todo!() // Error
+        }
+        if self.next_non_ws_token() != Some(Token::Semicolon) {
+            todo!() // Error
+        }
+        return Some(TopLevelParse::SyntaxStatement);
+    }
+
+    fn parse_service<>(&mut self) -> Option<TopLevelParse> {
+        match self.next_non_ws_token() {
+            Some(Token::Ident(ident)) => todo!(),
+            _ => todo!(), // Error
+        }
+        if self.next_non_ws_token() != Some(Token::BraceOpen) {
+            todo!() // Error
+        }
+        let service = Service::default();
+        // TODO: Now parse rpcs or braceclose
+        todo!();
+        if self.next_non_ws_token() != Some(Token::BraceClose) {
+            todo!() // Error
+        }
+        Some(TopLevelParse::Service(service))
+    }
+
+    fn parse_message<>(&mut self) -> Option<TopLevelParse> {
+        match self.next_non_ws_token() {
+            Some(Token::Ident(ident)) => todo!(),
+            _ => todo!(), // Error
+        }
+        if self.next_non_ws_token() != Some(Token::BraceOpen) {
+            todo!() // Error
+        }
+        let message = Message::default();
+        // TODO: Now parse fields, messages or braceclose
+        todo!();
+        if self.next_non_ws_token() != Some(Token::BraceClose) {
+            todo!() // Error
+        }
+        Some(TopLevelParse::Message(message))
+    }
 }
 
+// Parser tests
+#[test]
+fn solo_syntax_test() {
+    let ident = "syntax = \"proto3\";";
+    let mut p = Parser::new(ident.chars());
+    assert_eq!(p.next_parse(), Some(TopLevelParse::SyntaxStatement));
+    assert_eq!(p.next_parse(), None);
+}
+
+// Tokenizer tests
 #[test]
 fn solo_ident_test() {
     let ident = "hello";
-    let mut p = Parser::parse(ident.chars());
+    let mut p = Parser::new(ident.chars());
     assert_eq!(Some(Token::Ident(String::from(ident))), p.next_token());
     assert_eq!(None, p.next_token());
 }
 #[test]
 fn single_tokens_test() {
     let chars = ";{}()\"=";
-    let mut p = Parser::parse(chars.chars());
+    let mut p = Parser::new(chars.chars());
     assert_eq!(Some(Token::Semicolon), p.next_token());
     assert_eq!(Some(Token::BraceOpen), p.next_token());
     assert_eq!(Some(Token::BraceClose), p.next_token());
@@ -201,14 +304,14 @@ fn single_tokens_test() {
 #[test]
 fn solo_number_test() {
     let number = "12348";
-    let mut p = Parser::parse(number.chars());
+    let mut p = Parser::new(number.chars());
     assert_eq!(Some(Token::Number(String::from(number))), p.next_token());
     assert_eq!(None, p.next_token());
 }
 #[test]
 fn solo_comment_test() {
     let comment = "// hello comment";
-    let mut p = Parser::parse(comment.chars());
+    let mut p = Parser::new(comment.chars());
     assert_eq!(Some(Token::Comment(String::from(comment))), p.next_token());
     assert_eq!(None, p.next_token());
 }
@@ -216,7 +319,7 @@ fn solo_comment_test() {
 fn solo_multiline_comment_test() {
     let comment = "/* hello comment
     */";
-    let mut p = Parser::parse(comment.chars());
+    let mut p = Parser::new(comment.chars());
     assert_eq!(Some(Token::Comment(String::from(comment))), p.next_token());
     assert_eq!(None, p.next_token());
 }
@@ -225,7 +328,7 @@ fn solo_whitespace_test() {
     let whitespace = "     
     
     ";
-    let mut p = Parser::parse(whitespace.chars());
+    let mut p = Parser::new(whitespace.chars());
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(None, p.next_token());
 }
@@ -239,7 +342,7 @@ service hi {
     rpc do(something) returns (null);
 
 }";
-    let mut p = Parser::parse(src.chars());
+    let mut p = Parser::new(src.chars());
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(Some(Token::Ident(String::from("syntax"))), p.next_token());
     assert_eq!(Some(Token::Whitespace), p.next_token());
