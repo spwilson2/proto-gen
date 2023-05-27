@@ -8,21 +8,35 @@ enum FieldType {
     Uint32,
     Uint64,
     String,
+    Message(String),
+
+    Undef,
+}
+
+impl Default for FieldType {
+    fn default() -> Self {
+        FieldType::Undef
+    }
 }
 
 #[derive(Debug, PartialEq, Default)]
 struct Package {}
 #[derive(Debug, PartialEq, Default)]
 struct Message {
+    name: String,
     fields: Vec<Field>,
     messages: Vec<Message>,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq)]
 struct Field {
+    name: String,
+    idx: u32,
     ftype: FieldType,
+    optional: bool,
 }
 #[derive(Debug, PartialEq, Default)]
 struct Service {
+    name: String,
     rpcs: Vec<Rpc>,
 }
 #[derive(Debug, PartialEq, Default)]
@@ -66,6 +80,17 @@ enum Token {
     Whitespace,
 
     Error(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ParseError {
+    msg: String,
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.msg.as_str())
+    }
 }
 
 const LINE_END: [char; 1] = ['\n'];
@@ -220,13 +245,16 @@ impl<I: Iterator<Item = char>> Parser<I> {
     }
 
     // TODO: Parser will need to do multiple passes:
-    pub fn next_parse(&mut self) -> Option<TopLevelParse> {
+    pub fn next_parse(&mut self) -> Option<Result<TopLevelParse, ParseError>> {
         while let Some(tok) = self.next_non_ws_token() {
             return match tok {
                 Token::Ident(ident) => match ident.as_str() {
-                    "syntax" => self.parse_syntax(),
-                    "service" => self.parse_service(),
-                    "message" => self.parse_message(),
+                    "syntax" => Some(self.parse_syntax()),
+                    "service" => Some(self.parse_service()),
+                    "message" => Some(
+                        self.parse_message()
+                            .and_then(|msg| (Ok(TopLevelParse::Message(msg)))),
+                    ),
                     _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
                 },
                 _ => panic!("Unexpected token"), // TODO handle unexpected token nicely
@@ -235,7 +263,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
         None
     }
 
-    fn parse_syntax(&mut self) -> Option<TopLevelParse> {
+    fn parse_syntax(&mut self) -> Result<TopLevelParse, ParseError> {
         if self.next_non_ws_token() != Some(Token::Equals) {
             todo!() // Error
         }
@@ -251,18 +279,18 @@ impl<I: Iterator<Item = char>> Parser<I> {
         if self.next_non_ws_token() != Some(Token::Semicolon) {
             todo!() // Error
         }
-        return Some(TopLevelParse::SyntaxStatement);
+        return Ok(TopLevelParse::SyntaxStatement);
     }
 
-    fn parse_service(&mut self) -> Option<TopLevelParse> {
+    fn parse_service(&mut self) -> Result<TopLevelParse, ParseError> {
+        let mut service = Service::default();
         match self.next_non_ws_token() {
-            Some(Token::Ident(ident)) => todo!(),
+            Some(Token::Ident(ident)) => service.name = ident,
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::BraceOpen) {
             todo!() // Error
         }
-        let mut service = Service::default();
         loop {
             // Now parse rpcs or braceclose
             let tok = self.next_non_ws_token();
@@ -271,19 +299,16 @@ impl<I: Iterator<Item = char>> Parser<I> {
                     if maybe_rpc_ident.as_str() != "rpc" {
                         todo!() /*Error*/
                     }
-                    match self.parse_rpc() {
-                        Some(rpc) => service.rpcs.push(rpc),
-                        None => todo!(), // Error
-                    }
+                    service.rpcs.push(self.parse_rpc()?);
                 }
                 Some(Token::BraceClose) => break, // Done parsing
                 _ => todo!(),                     // Error
             }
         }
-        Some(TopLevelParse::Service(service))
+        Ok(TopLevelParse::Service(service))
     }
 
-    fn parse_rpc(&mut self) -> Option<Rpc> {
+    fn parse_rpc(&mut self) -> Result<Rpc, ParseError> {
         let mut rpc = Rpc::default();
         // Entered after RPC has been parsed
         match self.next_non_ws_token() {
@@ -321,66 +346,71 @@ impl<I: Iterator<Item = char>> Parser<I> {
         if self.next_non_ws_token() != Some(Token::Semicolon) {
             todo!() // Error
         }
-        Some(rpc)
+        Ok(rpc)
     }
 
-    fn parse_message(&mut self) -> Option<TopLevelParse> {
+    fn parse_message(&mut self) -> Result<Message, ParseError> {
+        let mut message = Message::default();
         match self.next_non_ws_token() {
-            Some(Token::Ident(ident)) => todo!(),
+            Some(Token::Ident(ident)) => message.name = ident,
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::BraceOpen) {
             todo!() // Error
         }
 
-        let mut message = Message::default();
         // TODO: Now parse fields, messages or braceclose
-
         loop {
             let tok = self.next_non_ws_token();
             match tok {
                 Some(Token::BraceClose) => break,
                 Some(Token::Ident(ident)) => {
-                    // TODO Support optional keyword
-                    if ident.as_str() == "message" {
-                        self.parse_message();
-                    } else {
-                        match self.parse_field_of_type(ident) {
-                            Some(field) => message.fields.push(field),
-                            _ => todo!(), // Fail, we saw text, so a field needed to come.
+                    match ident.as_str() {
+                        "message" => message.messages.push(self.parse_message()?),
+                        "optional" => {
+                            if let Some(Token::Ident(ident)) = self.next_non_ws_token() {
+                                let mut field = self.parse_field_of_type(ident)?;
+                                field.optional = true;
+                                message.fields.push(field);
+                            } else {
+                                todo!() // Error
+                            }
                         }
+                        _ => message.fields.push(self.parse_field_of_type(ident)?),
                     }
                 }
                 _ => todo!(), // Error
             }
         }
-        Some(TopLevelParse::Message(message))
+        Ok(message)
     }
 
-    fn parse_field_of_type(&mut self, type_name: String) -> Option<Field> {
-        let ftype = match type_name.as_str() {
+    fn parse_field_of_type(&mut self, type_name: String) -> Result<Field, ParseError> {
+        let mut field = Field::default();
+        field.ftype = match type_name.as_str() {
             "int32" => FieldType::Int32,
             "int64" => FieldType::Int64,
             "uint32" => FieldType::Uint32,
-            "uint32" => FieldType::Uint64,
+            "uint64" => FieldType::Uint64,
             "string" => FieldType::String,
-            _ => todo!(), //Error
+            ident => FieldType::Message(String::from(ident)), //Error
         };
-        let fname = match self.next_non_ws_token() {
+        field.name = match self.next_non_ws_token() {
             Some(Token::Ident(fname)) => fname,
             _ => todo!(), // Error
         };
         if self.next_non_ws_token() != Some(Token::Equals) {
             todo!() // Error
         }
-        let number = match self.next_non_ws_token() {
-            Some(Token::Number(n)) => n,
+        field.idx = match self.next_non_ws_token() {
+            Some(Token::Number(n)) => n.parse().unwrap(), // TODO: handle failure to convert to u32
+
             _ => todo!(), // Error
         };
         if self.next_non_ws_token() != Some(Token::Semicolon) {
             todo!() // Error
         }
-        Some(Field { ftype })
+        Ok(field)
     }
 }
 
@@ -389,7 +419,71 @@ impl<I: Iterator<Item = char>> Parser<I> {
 fn solo_syntax_test() {
     let ident = "syntax = \"proto3\";";
     let mut p = Parser::new(ident.chars());
-    assert_eq!(p.next_parse(), Some(TopLevelParse::SyntaxStatement));
+    assert_eq!(p.next_parse(), Some(Ok(TopLevelParse::SyntaxStatement)));
+    assert_eq!(p.next_parse(), None);
+}
+
+#[test]
+fn solo_service_test() {
+    let ident = "service hi {
+        rpc do(something) returns (null);
+    
+    }";
+    let mut p = Parser::new(ident.chars());
+    assert_eq!(
+        p.next_parse(),
+        Some(Ok(TopLevelParse::Service(Service {
+            name: String::from("hi"),
+            rpcs: vec![Rpc {
+                name: String::from("do"),
+                arg_type: String::from("something"),
+                ret_type: String::from("null"),
+            }]
+        })))
+    );
+    assert_eq!(p.next_parse(), None);
+}
+
+#[test]
+fn solo_message_test() {
+    let ident = "message HiReq {
+        optional string msg = 1;
+        message inner {
+            int32 inner_field = 1;
+        }
+        inner idx = 2;
+    }";
+    let mut p = Parser::new(ident.chars());
+    assert_eq!(
+        p.next_parse(),
+        Some(Ok(TopLevelParse::Message(Message {
+            name: String::from("HiReq"),
+            fields: vec![
+                Field {
+                    name: String::from("msg"),
+                    idx: 1,
+                    ftype: FieldType::String,
+                    optional: true,
+                },
+                Field {
+                    name: String::from("idx"),
+                    idx: 2,
+                    ftype: FieldType::Message("inner".into()),
+                    optional: false,
+                }
+            ],
+            messages: vec![Message {
+                name: String::from("inner"),
+                fields: vec![Field {
+                    name: String::from("inner_field"),
+                    idx: 1,
+                    ftype: FieldType::Int32,
+                    optional: false,
+                },],
+                messages: vec![],
+            }],
+        })))
+    );
     assert_eq!(p.next_parse(), None);
 }
 
