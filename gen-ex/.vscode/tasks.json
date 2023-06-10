@@ -10,6 +10,15 @@
 			],
 			"group": "build",
 			"label": "rust: cargo build"
+		},
+		{
+			"type": "cargo",
+			"command": "run",
+			"problemMatcher": [
+				"$rustc",
+				"$rust-panic"
+			],
+			"label": "rust: cargo run"
 		}
 	]
 }
