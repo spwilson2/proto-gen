@@ -1,18 +1,18 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
-use crate::intern::StringIntern;
+use crate::intern::{StringId, StringIntern};
 
 type MessageId = String;
 
 // This one will likely be in a separate file and pub.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FieldType {
     Int32,
     Int64,
     Uint32,
     Uint64,
     String,
-    Message(String),
+    Message(StringId),
 
     Undef,
 }
@@ -25,29 +25,29 @@ impl Default for FieldType {
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Package {}
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Message {
-    name: String,
-    fields: Vec<Field>,
-    messages: Vec<Message>,
+    pub name: StringId,
+    pub fields: Vec<Field>,
+    pub messages: Vec<Message>,
 }
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Field {
-    name: String,
-    idx: u32,
-    ftype: FieldType,
-    optional: bool,
+    pub name: StringId,
+    pub idx: u32,
+    pub ftype: FieldType,
+    pub optional: bool,
 }
 #[derive(Debug, PartialEq, Default)]
 pub struct Service {
-    name: String,
-    rpcs: Vec<Rpc>,
+    pub name: StringId,
+    pub rpcs: Vec<Rpc>,
 }
 #[derive(Debug, PartialEq, Default)]
 pub struct Rpc {
-    name: String,
-    arg_type: String,
-    ret_type: String,
+    pub name: StringId,
+    pub arg_type: StringId,
+    pub ret_type: StringId,
 }
 
 #[derive(Debug, PartialEq)]
@@ -60,7 +60,7 @@ pub enum TopLevelParse {
 
 pub struct Parser<I: Iterator<Item = char>> {
     // TODO: Rather than use individual copies of strings change to IDs and use this intern struct.
-    _intern: StringIntern,
+    intern: StringIntern,
     linenum: u32,
     colnum: u32,
     iterator: I,
@@ -89,10 +89,13 @@ pub struct ParseError {
     msg: String,
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct ParseTree {
-    messages: Vec<Message>,
-    services: Vec<Service>,
+    pub messages: Vec<Message>,
+    pub services: Vec<Service>,
+    intern: StringIntern,
+    // TODO/Optiimization: Rather than duplicate, switch to a CoW topology of messages.
+    message_cache: HashMap<StringId, Message>,
 }
 
 impl std::fmt::Display for ParseError {
@@ -101,12 +104,25 @@ impl std::fmt::Display for ParseError {
     }
 }
 
+struct StagingParseTree {
+    str_cache: StringIntern,
+}
+
 impl ParseTree {
-    fn validate(self) -> Result<Self, ParseError> {
-        todo!();
+    pub fn get_str(&self, id: StringId) -> Cow<String> {
+        // NOTE: Assumes that only one will ever be instantiated.
+        self.intern.get_str(id).unwrap()
+    }
+
+    //pub fn get_message(&self, id: StringId) -> Option<Message> {
+    //    // Need to support grabbing from nested contexts...
+    //    self.message_cache.get(&id).and_then(|m| Some((*m).clone()))
+    //}
+
+    fn validate(&self) -> Result<(), ParseError> {
         // TODO: Validate RPCs use toplevel message types.
         // TODO: Validate Messages use Messages within scope.
-        Ok(self)
+        Ok(())
     }
 }
 
@@ -156,7 +172,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
 
     pub fn new(i: I) -> Self {
         Self {
-            _intern: StringIntern::default(),
+            intern: StringIntern::default(),
             linenum: 0,
             colnum: 0,
             iterator: i,
@@ -278,7 +294,10 @@ impl<I: Iterator<Item = char>> Parser<I> {
                 None => break,
             }
         }
-        tree.validate()
+        // TODO/Optimization: Should really just move rather than clone.
+        tree.intern = self.intern.clone();
+        tree.validate()?;
+        Ok(tree)
     }
 
     // TODO: Parser will need to do multiple passes:
@@ -322,7 +341,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
     fn parse_service(&mut self) -> Result<TopLevelParse, ParseError> {
         let mut service = Service::default();
         match self.next_non_ws_token() {
-            Some(Token::Ident(ident)) => service.name = ident,
+            Some(Token::Ident(ident)) => service.name = self.intern.get_id(&ident),
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::BraceOpen) {
@@ -349,14 +368,14 @@ impl<I: Iterator<Item = char>> Parser<I> {
         let mut rpc = Rpc::default();
         // Entered after RPC has been parsed
         match self.next_non_ws_token() {
-            Some(Token::Ident(rpc_name)) => rpc.name = rpc_name,
+            Some(Token::Ident(rpc_name)) => rpc.name = self.intern.get_id(&rpc_name),
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::ParensOpen) {
             todo!() // Error
         }
         match self.next_non_ws_token() {
-            Some(Token::Ident(arg)) => rpc.arg_type = arg,
+            Some(Token::Ident(arg)) => rpc.arg_type = self.intern.get_id(&arg),
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::ParensClose) {
@@ -374,7 +393,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
             todo!() // Error
         }
         match self.next_non_ws_token() {
-            Some(Token::Ident(ret)) => rpc.ret_type = ret,
+            Some(Token::Ident(ret)) => rpc.ret_type = self.intern.get_id(&ret),
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::ParensClose) {
@@ -389,7 +408,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
     fn parse_message(&mut self) -> Result<Message, ParseError> {
         let mut message = Message::default();
         match self.next_non_ws_token() {
-            Some(Token::Ident(ident)) => message.name = ident,
+            Some(Token::Ident(ident)) => message.name = self.intern.get_id(&ident),
             _ => todo!(), // Error
         }
         if self.next_non_ws_token() != Some(Token::BraceOpen) {
@@ -430,10 +449,10 @@ impl<I: Iterator<Item = char>> Parser<I> {
             "uint32" => FieldType::Uint32,
             "uint64" => FieldType::Uint64,
             "string" => FieldType::String,
-            ident => FieldType::Message(String::from(ident)), //Error
+            ident => FieldType::Message(self.intern.get_id(&ident)), //Error
         };
         field.name = match self.next_non_ws_token() {
-            Some(Token::Ident(fname)) => fname,
+            Some(Token::Ident(fname)) => self.intern.get_id(&fname),
             _ => todo!(), // Error
         };
         if self.next_non_ws_token() != Some(Token::Equals) {
@@ -470,11 +489,11 @@ fn solo_service_test() {
     assert_eq!(
         p.next_parse(),
         Some(Ok(TopLevelParse::Service(Service {
-            name: String::from("hi"),
+            name: p.intern.get_id("hi"),
             rpcs: vec![Rpc {
-                name: String::from("do"),
-                arg_type: String::from("something"),
-                ret_type: String::from("null"),
+                name: p.intern.get_id("do"),
+                arg_type: p.intern.get_id("something"),
+                ret_type: p.intern.get_id("null"),
             }]
         })))
     );
@@ -494,25 +513,25 @@ fn solo_message_test() {
     assert_eq!(
         p.next_parse(),
         Some(Ok(TopLevelParse::Message(Message {
-            name: String::from("HiReq"),
+            name: p.intern.get_id("HiReq"),
             fields: vec![
                 Field {
-                    name: String::from("msg"),
+                    name: p.intern.get_id("msg"),
                     idx: 1,
                     ftype: FieldType::String,
                     optional: true,
                 },
                 Field {
-                    name: String::from("idx"),
+                    name: p.intern.get_id("idx"),
                     idx: 2,
-                    ftype: FieldType::Message("inner".into()),
+                    ftype: FieldType::Message(p.intern.get_id("inner")),
                     optional: false,
                 }
             ],
             messages: vec![Message {
-                name: String::from("inner"),
+                name: p.intern.get_id("inner"),
                 fields: vec![Field {
-                    name: String::from("inner_field"),
+                    name: p.intern.get_id("inner_field"),
                     idx: 1,
                     ftype: FieldType::Int32,
                     optional: false,

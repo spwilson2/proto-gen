@@ -1,9 +1,10 @@
 syntax = "proto3";
 
 service hi {
-    rpc do(something) returns (null);
-
+    rpc do(searchrequest) returns (nil);
 }
+
+message nil {}
 
 message searchrequest {
   string query = 1;
