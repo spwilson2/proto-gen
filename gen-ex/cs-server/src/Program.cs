@@ -12,12 +12,14 @@ namespace HelloWorld
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello, World!");
+            var ser = new FrontendService.Server(("127.0.0.1", 11005));
+            ser.Start();
+            ser.Join();
         }
     }
 
 
-    class FrontendService
+    public class FrontendService
     {
         public struct Header
         {
@@ -110,7 +112,7 @@ namespace HelloWorld
             switch (type) {
                 case MoveCommand.typeid: 
                 // TODO: Need to handle endianess
-                MoveCommand? cmd = ByteToType<MoveCommand>(data);
+                MoveCommand? cmd = MoveCommand.deserialize(data[start..]);
                 return (start + System.Runtime.InteropServices.Marshal.SizeOf(cmd), (Command?)cmd);
 
                 default: 
@@ -138,6 +140,10 @@ namespace HelloWorld
             {
                 // Create a thread
                 backgroundThread.Start();
+            }
+            public void Join() {
+                backgroundThread.Join();
+
             }
 
             public bool ReadQueue([MaybeNullWhen(false)] out Command result)
@@ -177,12 +183,12 @@ namespace HelloWorld
             }
             public void _RunLoop() {
                 var (ip, port) = sock_config;
-                listener = new UdpClient(ip, port);
+                listener = new UdpClient(port);
                 while (true)
                 {
                     // For each received packet, parse and push all contained messages.
-                    IPEndPoint? remoteEP = null;
-                    var data = listener.Receive(ref remoteEP);
+                    IPEndPoint groupEP = new IPEndPoint(IPAddress.Any, 0);
+                    var data = listener.Receive(ref groupEP);
                     var start = 0;
                     var cont = true;
                     while (cont) {
@@ -193,7 +199,7 @@ namespace HelloWorld
 
             private (int, Header?) ParseHeader(int start, byte[] data) {
                 var count_header_len = Marshal.SizeOf(typeof(UInt64));
-                if (data.Length < count_header_len) {
+                if (data.Length < count_header_len + start) {
                     return (start, null);
                 }
                 Header header = new Header();
@@ -204,7 +210,8 @@ namespace HelloWorld
                 if (data.Length  < (int)header.size) {
                     return (start, null);
                 }
-                header.type = System.Text.Encoding.ASCII.GetString(data[count_header_len..(int)header.size]);
+                start = count_header_len+(int)header.size;
+                header.type = System.Text.Encoding.ASCII.GetString(data[count_header_len..start]);
                 return (start, header);
             }
 
