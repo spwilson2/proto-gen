@@ -31,13 +31,14 @@ pub struct Message {
     pub name: StringId,
     pub fields: Vec<Field>,
     pub messages: Vec<Message>,
+    pub enums: Vec<Enum>,
 }
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct Enum {
     pub name: StringId,
     pub variants: Vec<EnumVariant>,
 }
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct EnumVariant {
     pub name: StringId,
     pub id: u32,
@@ -49,12 +50,12 @@ pub struct Field {
     pub ftype: FieldType,
     pub optional: bool,
 }
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct Service {
     pub name: StringId,
     pub rpcs: Vec<Rpc>,
 }
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct Rpc {
     pub name: StringId,
     pub arg_type: StringId,
@@ -466,6 +467,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
                 Some(Token::Ident(ident)) => {
                     match ident.as_str() {
                         "message" => message.messages.push(self.parse_message()?),
+                        "enum" => message.enums.push(self.parse_enum()?),
                         "optional" => {
                             if let Some(Token::Ident(ident)) = self.next_non_ws_token() {
                                 let mut field = self.parse_field_of_type(ident)?;
@@ -590,6 +592,9 @@ fn solo_message_test() {
             int32 inner_field = 1;
         }
         inner idx = 2;
+        enum KeyCode {
+                Space = 1;
+        }
     }";
     let mut p = Parser::new(ident.chars());
     assert_eq!(
@@ -619,6 +624,14 @@ fn solo_message_test() {
                     optional: false,
                 },],
                 messages: vec![],
+                enums: vec![],
+            }],
+            enums: vec![Enum {
+                name: p.intern.get_id("KeyCode"),
+                variants: vec![EnumVariant {
+                    name: p.intern.get_id("Space"),
+                    id: 1
+                }]
             }],
         })))
     );
