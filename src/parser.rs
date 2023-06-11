@@ -12,6 +12,7 @@ pub enum FieldType {
     Uint32,
     Uint64,
     String,
+    Enum(StringId),
     Message(StringId),
 
     Undef,
@@ -30,6 +31,16 @@ pub struct Message {
     pub name: StringId,
     pub fields: Vec<Field>,
     pub messages: Vec<Message>,
+}
+#[derive(Debug, PartialEq, Default)]
+pub struct Enum {
+    pub name: StringId,
+    pub variants: Vec<EnumVariant>,
+}
+#[derive(Debug, PartialEq, Default)]
+pub struct EnumVariant {
+    pub name: StringId,
+    pub id: u32,
 }
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Field {
@@ -56,6 +67,7 @@ pub enum TopLevelParse {
     Package(Package),
     Service(Service),
     Message(Message),
+    Enum(Enum),
 }
 
 pub struct Parser<I: Iterator<Item = char>> {
@@ -87,6 +99,11 @@ pub enum Token {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParseError {
     msg: String,
+}
+impl ParseError {
+    pub fn new(msg: String) -> Self {
+        Self { msg }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -307,6 +324,10 @@ impl<I: Iterator<Item = char>> Parser<I> {
                 Token::Ident(ident) => match ident.as_str() {
                     "syntax" => Some(self.parse_syntax()),
                     "service" => Some(self.parse_service()),
+                    "enum" => Some(
+                        self.parse_enum()
+                            .and_then(|msg| (Ok(TopLevelParse::Enum(msg)))),
+                    ),
                     "message" => Some(
                         self.parse_message()
                             .and_then(|msg| (Ok(TopLevelParse::Message(msg)))),
@@ -405,6 +426,28 @@ impl<I: Iterator<Item = char>> Parser<I> {
         Ok(rpc)
     }
 
+    fn parse_enum(&mut self) -> Result<Enum, ParseError> {
+        let mut enum_ = Enum::default();
+        match self.next_non_ws_token() {
+            Some(Token::Ident(ident)) => enum_.name = self.intern.get_id(&ident),
+            _ => todo!(), // Error
+        }
+        if self.next_non_ws_token() != Some(Token::BraceOpen) {
+            todo!() // Error
+        }
+
+        // TODO: Now parse fields, messages or braceclose
+        loop {
+            let tok = self.next_non_ws_token();
+            match tok {
+                Some(Token::BraceClose) => break,
+                Some(Token::Ident(ident)) => enum_.variants.push(self.parse_enum_variant(ident)?),
+                _ => todo!(), // Error
+            }
+        }
+        Ok(enum_)
+    }
+
     fn parse_message(&mut self) -> Result<Message, ParseError> {
         let mut message = Message::default();
         match self.next_non_ws_token() {
@@ -439,6 +482,26 @@ impl<I: Iterator<Item = char>> Parser<I> {
             }
         }
         Ok(message)
+    }
+
+    fn parse_enum_variant(&mut self, variant_name: String) -> Result<EnumVariant, ParseError> {
+        let mut var = EnumVariant::default();
+        var.name = self.intern.get_id(variant_name.as_str());
+        // TODO: equals, number, semicolon
+        if self.next_non_ws_token() != Some(Token::Equals) {
+            todo!() // Error
+        }
+        if let Some(Token::Number(num)) = self.next_non_ws_token() {
+            var.id = num
+                .parse::<u32>()
+                .or(Err(ParseError::new("Invalid number for enum.".into())))?;
+        } else {
+            todo!() // Error
+        }
+        if self.next_non_ws_token() != Some(Token::Semicolon) {
+            todo!() // Error
+        }
+        Ok(var)
     }
 
     fn parse_field_of_type(&mut self, type_name: String) -> Result<Field, ParseError> {
@@ -476,6 +539,25 @@ fn solo_syntax_test() {
     let ident = "syntax = \"proto3\";";
     let mut p = Parser::new(ident.chars());
     assert_eq!(p.next_parse(), Some(Ok(TopLevelParse::SyntaxStatement)));
+    assert_eq!(p.next_parse(), None);
+}
+
+#[test]
+fn solo_enum_test() {
+    let ident = "enum KeyCode {
+        Space = 1;
+    }";
+    let mut p = Parser::new(ident.chars());
+    assert_eq!(
+        p.next_parse(),
+        Some(Ok(TopLevelParse::Enum(Enum {
+            name: p.intern.get_id("KeyCode"),
+            variants: vec![EnumVariant {
+                name: p.intern.get_id("Space"),
+                id: 1
+            }]
+        })))
+    );
     assert_eq!(p.next_parse(), None);
 }
 
@@ -592,6 +674,32 @@ fn solo_whitespace_test() {
     
     ";
     let mut p = Parser::new(whitespace.chars());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(None, p.next_token());
+}
+#[test]
+fn enum_tok_test() {
+    let whitespace = "     
+    enum KeyCode {
+        Tab = 1;
+    }
+    ";
+    let mut p = Parser::new(whitespace.chars());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::Ident(String::from("enum"))), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::Ident(String::from("KeyCode"))), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::BraceOpen), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::Ident(String::from("Tab"))), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::Equals), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::Number(String::from("1"))), p.next_token());
+    assert_eq!(Some(Token::Semicolon), p.next_token());
+    assert_eq!(Some(Token::Whitespace), p.next_token());
+    assert_eq!(Some(Token::BraceClose), p.next_token());
     assert_eq!(Some(Token::Whitespace), p.next_token());
     assert_eq!(None, p.next_token());
 }

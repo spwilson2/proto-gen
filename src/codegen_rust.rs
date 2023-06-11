@@ -16,6 +16,7 @@ const fn field_type_to_rust_str(ft: &FieldType) -> &'static str {
         FieldType::Uint64 => "u64",
         FieldType::String => "&[u8]",
         FieldType::Message(_) => unimplemented!(),
+        FieldType::Enum(_) => unimplemented!(),
         FieldType::Undef => unimplemented!(),
     }
 }
