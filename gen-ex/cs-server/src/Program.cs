@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace HelloWorld
 {
@@ -12,9 +13,12 @@ namespace HelloWorld
     {
         static void Main(string[] args)
         {
-            var ser = new FrontendService.Server(("127.0.0.1", 11005));
-            ser.Start();
-            ser.Join();
+            //var ser = new FrontendService.Server(("127.0.0.1", 11005));
+            //ser.Start();
+            //ser.Join();
+            var e = new BackendService.InputEvent();
+            e.keyCode = BackendService.KeyCode.Spacebar;
+            Console.WriteLine(JsonSerializer.Serialize(e));
         }
     }
 
