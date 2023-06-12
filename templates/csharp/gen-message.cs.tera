@@ -1,0 +1,7 @@
+namespace Proto {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct {{fmt_struct(name=message.name)}} : IMessage
+    {
+        {% for field in message.fields %} public {{fmt_type(name=field.ftype)}} {{ fmt_var(name=field.name) }}; {% endfor %}
+    }
+}

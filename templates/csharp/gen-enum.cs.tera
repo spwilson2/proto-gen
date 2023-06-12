@@ -1,0 +1,6 @@
+namespace Proto {
+
+    public enum {{fmt_struct(name=enum.name)}} : UInt32 {
+        {% for variant in enum.variants %} {{ fmt_var(name=variant.name) }} = {{ variant.id }}, {% endfor %}
+    }
+}
