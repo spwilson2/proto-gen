@@ -129,7 +129,7 @@ fn test_tera() -> Result<(), ParseError> {
         Spacebar = 0;
         Enter = 1;
     }
-    message Empty { }
+    message Empty {}
     service Backend {
         rpc InputEvent(Input) returns (Empty);
     }

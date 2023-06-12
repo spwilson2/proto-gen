@@ -1,15 +1,28 @@
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct {{fmt_struct(name=message.name)}} {
-    {% for field in message.fields %} {{ fmt_var(name=field.name) }}: {{ fmt_type(name=field.ftype) }}, // {{field.idx}}
-    {% endfor %}
-    {# TODO: Optional fields #}
+    {% for field in message.fields %} {{ fmt_var(name=field.name) }}: {{ fmt_type(name=field.ftype) }}, // {{field.idx}} {% endfor %}
 }
 
-impl ProtoSerial for {{ fmt_struct(name=message.name) }} {
-    fn serialize_into(&self, buf: &mut [u8]) -> Result<(),()> {
-        serde_json::to_writer(buf, self).or(Err(()))
+pub const {{fmt_struct(name=message.name)}}Id: MessageId = "{{fmt_struct(name=message.name)}}";
+
+impl ProtoMessage for {{ fmt_struct(name=message.name) }} {
+    fn serialize_body_into(&self, buf: &mut [u8]) -> Result<(),()> {
+        let header = RpcHeader {
+            msg_id: {{ fmt_struct(name=message.name) }}Id.into()
+        };
+        serde_json::to_writer(&mut *buf, &header).or(Err(()))?;
+        serde_json::to_writer(&mut *buf, self).or(Err(()))
     }
-    fn try_deserialize(buf: &[u8]) -> Option<Self> {
-        serde_json::from_slice(buf).ok()
+    fn try_deserialize_body(buf: &[u8]) -> Option<Self> {
+        let bounds = find_struct_bounds(buf)?;
+        serde_json::from_slice(&buf[..bounds]).ok()
+    }
+    fn serialized_size(&self) -> usize {
+        let header = RpcHeader {
+            msg_id: {{ fmt_struct(name=message.name) }}Id.into()
+        };
+        let mut size = serde_json::to_string(&header).unwrap().len();
+        size += serde_json::to_string(self).unwrap().len();
+        size
     }
 }

@@ -1,5 +1,5 @@
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum {{fmt_struct(name=enum.name)}} {
-    {% for variant in enum.variants %} {{ fmt_var(name=variant.name) }} = {{ variant.id }},
-    {% endfor %}
+    #[default]
+    {% for variant in enum.variants %} {{ fmt_var(name=variant.name) }} = {{ variant.id }}, {% endfor %}
 }

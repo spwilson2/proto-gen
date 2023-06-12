@@ -4,3 +4,78 @@ enum {{fmt_struct(name=service.name)}}Message {
     {{fmt_struct(name=rpc.name)}}Ret({{fmt_type(name=rpc.ret_type)}}),
 {% endfor %}
 }
+
+trait To{{fmt_struct(name=service.name)}}Message {
+    fn to_backend_event(self) -> {{fmt_struct(name=service.name)}}Message;
+}
+
+{% for rpc in service.rpcs %} 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(transparent)]
+struct {{fmt_struct(name=rpc.name)}}Arg ({{fmt_struct(name=rpc.arg_type)}});
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(transparent)]
+struct {{fmt_struct(name=rpc.name)}}Ret ({{fmt_struct(name=rpc.ret_type)}});
+
+const {{fmt_struct(name=rpc.name)}}ArgId: MessageId = "{{fmt_struct(name=rpc.arg_type)}}";
+const {{fmt_struct(name=rpc.name)}}RetId: MessageId = "{{fmt_struct(name=rpc.ret_type)}}";
+
+impl To{{fmt_struct(name=service.name)}}Message for {{fmt_struct(name=rpc.arg_type)}}{
+    fn to_backend_event(self) -> {{fmt_struct(name=service.name)}}Message {
+        {{fmt_struct(name=service.name)}}Message::{{fmt_struct(name=rpc.name)}}Arg(self)
+    }
+}
+impl To{{fmt_struct(name=service.name)}}Message for {{fmt_struct(name=rpc.ret_type)}} {
+    fn to_backend_event(self) -> {{fmt_struct(name=service.name)}}Message {
+        {{fmt_struct(name=service.name)}}Message::{{fmt_struct(name=rpc.name)}}Ret(self)
+    }
+}
+
+impl ProtoRpcArg for {{fmt_struct(name=rpc.name)}}Arg {
+    type Arg = {{fmt_type(name=rpc.arg_type)}};
+    fn serialize_rpc_msg_into(&self, buf: &mut [u8]) -> Result<(), ()> {
+        let header = RpcHeader {
+            msg_id: {{ fmt_struct(name=rpc.name) }}ArgId.into()
+        };
+        serde_json::to_writer(&mut *buf, &header).or(Err(()))?;
+        serde_json::to_writer(&mut buf[header.serialized_size()..], self).or(Err(()))
+    }
+    fn serialized_size(&self) -> usize {
+        let header = RpcHeader {
+            msg_id: {{ fmt_struct(name=rpc.name) }}ArgId.into()
+        };
+        let mut size = serde_json::to_string(&header).unwrap().as_bytes().len();
+        size += serde_json::to_string(self).unwrap().as_bytes().len();
+        size
+    }
+    fn try_deserialize_body(buf: &[u8]) -> Option<<Self as ProtoRpcArg>::Arg> {
+        Self::Arg::try_deserialize_body(buf)
+    }
+}
+{% endfor %}
+impl {{fmt_struct(name=service.name)}}Message {
+    pub fn try_deserialize_msg(buf: &[u8]) -> Option<Self> {
+        let header = RpcHeader::try_deserialize_body(buf)?;
+        let header_len = RpcHeader::serialized_size(&header);
+        let buf = &buf[header_len..];
+
+        Some(match header.msg_id.as_str() {
+            {% for rpc in service.rpcs %} {{fmt_struct(name=rpc.name)}}ArgId => {{fmt_struct(name=service.name)}}Message::{{fmt_struct(name=rpc.name)}}Arg({{fmt_type(name=rpc.name)}}Arg::try_deserialize_body(buf)?), {% endfor %}
+            _ => unimplemented!(),
+        })
+    }
+}
+
+{% for rpc in service.rpcs %} 
+#[test]
+fn test_round_trip() {
+    let mut buf = &mut [0u8; 1000];
+    let arg = {{fmt_struct(name=rpc.name)}}Arg({{fmt_type(name=rpc.arg_type)}}::default());
+    arg.serialize_rpc_msg_into(buf).unwrap();
+
+    match BackendMessage::try_deserialize_msg(buf).unwrap() {
+        {{fmt_struct(name=service.name)}}Message::{{fmt_struct(name=rpc.name)}}Arg(input) => assert_eq!(arg.0, input),
+        _ => panic!(),
+    }
+}
+{% endfor %}
