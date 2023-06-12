@@ -110,8 +110,9 @@ impl ParseError {
 #[derive(Default, Debug)]
 pub struct ParseTree {
     pub messages: Vec<Message>,
+    pub enums: Vec<Enum>,
     pub services: Vec<Service>,
-    intern: StringIntern,
+    pub intern: StringIntern,
     // TODO/Optiimization: Rather than duplicate, switch to a CoW topology of messages.
     message_cache: HashMap<StringId, Message>,
 }
@@ -306,6 +307,7 @@ impl<I: Iterator<Item = char>> Parser<I> {
                 Some(Ok(item)) => match item {
                     TopLevelParse::Service(s) => tree.services.push(s),
                     TopLevelParse::Message(m) => tree.messages.push(m),
+                    TopLevelParse::Enum(e) => tree.enums.push(e),
                     _ => todo!(), // Error
                 },
                 Some(Err(e)) => return Err(e),

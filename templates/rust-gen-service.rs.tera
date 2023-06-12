@@ -1,0 +1,6 @@
+enum {{fmt_struct(name=service.name)}}Message {
+{% for rpc in service.rpcs %} 
+    {{fmt_struct(name=rpc.name)}}Arg({{fmt_type(name=rpc.arg_type)}}),
+    {{fmt_struct(name=rpc.name)}}Ret({{fmt_type(name=rpc.ret_type)}}),
+{% endfor %}
+}

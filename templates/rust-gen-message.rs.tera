@@ -1,0 +1,15 @@
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{fmt_struct(name=message.name)}} {
+    {% for field in message.fields %} {{ fmt_var(name=field.name) }}: {{ fmt_type(name=field.ftype) }}, // {{field.idx}}
+    {% endfor %}
+    {# TODO: Optional fields #}
+}
+
+impl ProtoSerial for {{ fmt_struct(name=message.name) }} {
+    fn serialize_into(&self, buf: &mut [u8]) -> Result<(),()> {
+        serde_json::to_writer(buf, self).or(Err(()))
+    }
+    fn try_deserialize(buf: &[u8]) -> Option<Self> {
+        serde_json::from_slice(buf).ok()
+    }
+}
