@@ -48,10 +48,18 @@ namespace Proto {
                 return null;
             }
             var count = 1;
+            var indent = 1;
             while (iter.MoveNext()) {
                 count += 1;
+                // TODO/FIXME: Need to support detecting if inside a string.
+                if ((byte)iter.Current == '{')  {
+                    indent += 1;
+                }
                 if ((byte)iter.Current == '}')  {
-                    return count;
+                    indent -= 1;
+                    if (indent == 0) {
+                        return count;
+                    }
                 }
             }
             return null;

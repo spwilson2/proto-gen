@@ -51,10 +51,15 @@ pub fn find_struct_bounds(r: &[u8]) -> Option<usize> {
     let mut iter = r.iter();
     if iter.next() == Some(&('{'.to_ascii_lowercase() as u8)) {
         let mut count = 1;
+        let mut indent = 1;
         for b in iter {
             count += 1;
+            // TODO/FIXME: Need to support detecting if inside a string.
             if &('}'.to_ascii_lowercase() as u8) == b {
-                return Some(count);
+                indent -= 1;
+                if indent == 0 {
+                    return Some(count);
+                }
             }
         }
     }
