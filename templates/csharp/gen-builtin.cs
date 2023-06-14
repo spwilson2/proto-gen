@@ -1,14 +1,22 @@
+using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Net;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+
 namespace Proto {
-    class Builtin {
-        public bool SerializeJsonInto(byte[] arr)
-        {
-            string json = JsonSerializer.Serialize(this);
-            var json_bytes = TypeToBytes(json);
-            if (json_bytes.Length < arr.Length) {
-                json_bytes.CopyTo(arr, 0);
+    public class Builtin {
+        public static int? SerializeJsonInto<T>(T obj, byte[] bytes) {
+            var s = JsonSerializer.Serialize(obj);
+            var b = Encoding.UTF8.GetBytes(s);
+            if (b.Length > bytes.Length) {
+                return null;
             }
-            // Would do this for the next field: arr = arr[size..];
-            return true;
+            b.ToArray().CopyTo(bytes, 0);
+            return b.Length;
         }
 
         public static byte[] TypeToBytes<T>(T obj)
@@ -30,8 +38,44 @@ namespace Proto {
             }
             return arr;
         }
-        public interface  IMessaage {
+
+        public static int? findStructJsonBounds(byte[] bytes) {
+            System.Collections.IEnumerator iter = bytes.GetEnumerator();
+            if (!iter.MoveNext())  {
+                return null;
+            }
+            if ((byte)iter.Current != '{')  {
+                return null;
+            }
+            var count = 1;
+            while (iter.MoveNext()) {
+                count += 1;
+                if ((byte)iter.Current == '}')  {
+                    return count;
+                }
+            }
+            return null;
+        }
+        public struct RpcHeader : IMessage {
+            public string msg_id {get;set;}
+
+            public static (RpcHeader?, int) tryDeserialize(byte[] bytes) {
+                var bound = Builtin.findStructJsonBounds(bytes);
+                if (bound == null) {
+                    return (null, 0);
+                }
+                return (JsonSerializer.Deserialize<RpcHeader>(bytes[..bound.Value]), bound.Value);
+            }
+
+            public int? serializeInto(byte[] bytes) {
+                return Builtin.SerializeJsonInto(this, bytes);
+            }
+        }
 
         }
-    }
+        public interface  IMessage {
+
+            public int? serializeInto(byte[] bytes);
+        }
+
 }

@@ -2,6 +2,24 @@ namespace Proto {
     [StructLayout(LayoutKind.Sequential)]
     public struct {{fmt_struct(name=message.name)}} : IMessage
     {
-        {% for field in message.fields %} public {{fmt_type(name=field.ftype)}} {{ fmt_var(name=field.name) }}; {% endfor %}
+        {% for field in message.fields %} public {{fmt_type(name=field.ftype)}} {{ fmt_var(name=field.name) }} {get; set;} {% endfor %}
+
+        public static ({{fmt_struct(name=message.name)}}?, int) tryDeserializeBody(byte[] bytes) {
+            var bound = Builtin.findStructJsonBounds(bytes);
+            if (bound == null) {
+                return (null, 0);
+            }
+            return (JsonSerializer.Deserialize<{{fmt_struct(name=message.name)}}>(bytes[..bound.Value]), bound.Value);
+        }
+
+        public int? serializeInto(byte[] bytes) {
+            var s = JsonSerializer.Serialize(this);
+            var b = Encoding.UTF8.GetBytes(s);
+            if (b.Length > bytes.Length) {
+                return null;
+            }
+            b.ToArray().CopyTo(bytes, 0);
+            return b.Length;
+        }
     }
 }

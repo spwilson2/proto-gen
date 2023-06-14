@@ -1,0 +1,59 @@
+
+
+namespace Proto {
+    public interface I{{ fmt_struct(name=service.name) }} {}
+
+    public class {{ fmt_struct(name=service.name) }} {
+        {% for rpc in service.rpcs %} public const string {{fmt_struct(name=rpc.name)}}ArgId = "{{fmt_struct(name=rpc.arg_type)}}"; {% endfor %}
+
+
+        {% for rpc in service.rpcs %} 
+        public class {{fmt_struct(name=rpc.name)}}Arg : I{{ fmt_struct(name=service.name) }} {
+            public {{fmt_struct(name=rpc.arg_type)}} value;
+
+            public int? serializeRpcMsgInto(byte[] bytes) {
+                // Serialize header
+                Builtin.RpcHeader header = new Builtin.RpcHeader();
+                header.msg_id = {{fmt_struct(name=rpc.name)}}ArgId;
+                var amt = Builtin.SerializeJsonInto(header, bytes);
+                if (amt == null) {
+                    return null;
+                }
+                return this.value.serializeInto(bytes[amt.Value..]);
+            }
+
+            public static ({{fmt_struct(name=rpc.name)}}Arg?, int) tryDeserializeBody(byte[] bytes) {
+                var (resMsg, amt) = {{fmt_struct(name=rpc.arg_type)}}.tryDeserializeBody(bytes);
+                if (resMsg == null) {
+                    return (null, amt);
+                }
+                {{fmt_struct(name=rpc.name)}}Arg fullRes = new {{fmt_struct(name=rpc.name)}}Arg();
+                fullRes.value = resMsg.Value;
+                return (fullRes, amt);
+
+            }
+        }
+        {% endfor %}
+
+        public static (I{{ fmt_struct(name=service.name) }}?, int) ParseMessage(byte[] bytes) {
+            // Header:
+            var (header, amt) = Builtin.RpcHeader.tryDeserialize(bytes);
+            if (header == null) {
+                return (null, 0);
+            }
+            switch(header.Value.msg_id) {
+                {% for rpc in service.rpcs %} 
+                case {{fmt_struct(name=rpc.name)}}ArgId:
+                var (body, bodyAmt) = {{fmt_struct(name=rpc.name)}}Arg.tryDeserializeBody(bytes[amt..]);
+                if (body == null) {
+                    return (null, 0);
+                }
+                return (body, bodyAmt + amt);
+                {% endfor %}
+                default:
+                throw new Exception("Unimplemented");
+            }
+            // TODO: Match
+        }
+    }
+}
