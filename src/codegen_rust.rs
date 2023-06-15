@@ -135,10 +135,9 @@ fn test_tera() -> Result<(), ParseError> {
     ";
     let mut p = Parser::new(text.chars());
     let tree = p.parse()?;
-    let mut gen = RustCodeGen {};
     let mut w = BufWriter::new(vec![]);
     let serial = SerializeTree::from_parse_tree(&tree);
-    gen.gen(&mut w, &tree, &serial);
+    RustCodeGen::gen(&mut w, &tree, &serial);
 
     println!("{}", String::from_utf8_lossy(w.buffer()));
     //    assert_eq!(
