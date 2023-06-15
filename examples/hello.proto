@@ -13,6 +13,6 @@ message searchrequest {
   message two {
     bool j = 1;
     int32 d = 2;
-  };
+  }
   optional two me = 4;
 }

@@ -60,10 +60,9 @@ fn render_service<W: Write>(
     tera.render_to("gen-service.cs.tera", &ctx, writer).unwrap()
 }
 
-struct CsharpCodeGen;
+pub struct CsharpCodeGen;
 impl CsharpCodeGen {
     pub fn gen<W: Write>(
-        &mut self,
         writer: &mut W,
         parse: &ParseTree,
         serial: &SerializeTree,

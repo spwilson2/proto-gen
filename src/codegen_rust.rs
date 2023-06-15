@@ -13,7 +13,7 @@ use crate::{
 };
 
 //trait Codegen {}
-struct RustCodeGen {}
+pub struct RustCodeGen {}
 
 const fn field_type_to_rust_str(ft: &FieldType) -> &'static str {
     match ft {
@@ -85,7 +85,6 @@ fn render_service<W: Write>(
 //impl Codegen for RustCodeGen {}
 impl RustCodeGen {
     pub fn gen<W: Write>(
-        &mut self,
         writer: &mut W,
         parse: &ParseTree,
         serial: &SerializeTree,
