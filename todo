@@ -1,0 +1,3 @@
+- Need to update serialized types for csharp support (i.e. i32 -> Int32 in csharp)
+- Need to support Serialize for generic service messages in csharp.
+- Define max message size in constant for both languages

@@ -2,6 +2,9 @@
   "[rust]": {
     "editor.formatOnSave": true
   },
+  "rust-analyzer.linkedProjects": [
+    "./examples/rust-server/Cargo.toml"
+  ],
 //  "rust-analyzer.linkedProjects": [
 //    "./gen-ex/Cargo.toml"
 //  ]

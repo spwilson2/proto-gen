@@ -2,6 +2,7 @@ namespace Proto {
     [StructLayout(LayoutKind.Sequential)]
     public struct {{fmt_struct(name=message.name)}} : IMessage
     {
+        // TODO/FIXME , field type needs to be CSharp formatted. E.g. i32 -> Int32
         {% for field in message.fields %} public {{fmt_type(name=field.ftype)}} {{ fmt_var(name=field.name) }} {get; set;} {% endfor %}
 
         public static ({{fmt_struct(name=message.name)}}?, int) tryDeserializeBody(byte[] bytes) {

@@ -1,4 +1,4 @@
-enum {{fmt_struct(name=service.name)}}Message {
+pub enum {{fmt_struct(name=service.name)}}Message {
 {% for rpc in service.rpcs %} 
     {{fmt_struct(name=rpc.name)}}Arg({{fmt_type(name=rpc.arg_type)}}),
     {{fmt_struct(name=rpc.name)}}Ret({{fmt_type(name=rpc.ret_type)}}),
@@ -68,7 +68,7 @@ impl {{fmt_struct(name=service.name)}}Message {
 
 {% for rpc in service.rpcs %} 
 #[test]
-fn test_round_trip() {
+fn test_round_trip_{{fmt_struct(name=service.name)}}_{{fmt_struct(name=rpc.name)}}() {
     let mut buf = &mut [0u8; 1000];
     let arg = {{fmt_struct(name=rpc.name)}}Arg({{fmt_type(name=rpc.arg_type)}}::default());
     arg.serialize_rpc_msg_into(buf).unwrap();
