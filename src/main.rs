@@ -67,7 +67,7 @@ fn main() {
                     let gen_file_opts = opts.create(true).write(true).truncate(true);
                     if let Some(ref path) = cli.rust_out {
                         let mut out_f = path.join(entry.path().file_stem().unwrap());
-                        out_f.set_extension(".rs");
+                        //out_f.set_extension("rs");
                         let f = gen_file_opts.clone().open(out_f).unwrap();
                         let mut writer = BufWriter::new(f);
                         codegen_rust::RustCodeGen::gen(&mut writer, &parse_tree, &serial_tree)
@@ -75,7 +75,7 @@ fn main() {
                     }
                     if let Some(ref path) = cli.csharp_out {
                         let mut out_f = path.join(entry.path().file_stem().unwrap());
-                        out_f.set_extension(".cs");
+                        out_f.set_extension("cs");
                         let f = gen_file_opts.clone().open(out_f).unwrap();
                         let mut writer = BufWriter::new(f);
                         codegen_csharp::CsharpCodeGen::gen(&mut writer, &parse_tree, &serial_tree)
