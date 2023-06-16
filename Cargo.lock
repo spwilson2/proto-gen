@@ -1122,11 +1122,3 @@ name = "windows_x86_64_msvc"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
-
-[[patch.unused]]
-name = "bevy"
-version = "0.10.1"
-
-[[patch.unused]]
-name = "glam"
-version = "0.23.0"
